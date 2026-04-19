@@ -12,7 +12,9 @@ import (
 )
 
 type ModList struct {
-	Mods    []string `json:"mods"`
+	Both    []string `json:"both"`
+	Client  []string `json:"client"`
+	Server  []string `json:"server"`
 	Version string   `json:"version"`
 	Loader  string   `json:"loader"`
 }
@@ -39,7 +41,8 @@ type FileData struct {
 }
 
 type Config struct {
-	ModList []string `json:"mod_lists"`
+	ClientType string   `json:"client_type"`
+	ModList    []string `json:"mod_lists"`
 }
 
 var args []string = os.Args[1:]
@@ -52,25 +55,42 @@ func main() {
 	for _, v := range config.ModList {
 		var mod_list ModList = get_mod_list(v)
 
-		// print all mods
-		for _, v := range mod_list.Mods {
-			fmt.Println(v)
-		}
+		mod_list_for_type(config.ClientType, mod_list)
+		mod_list_for_type("both", mod_list)
 
-		fmt.Println("")
-		for _, v := range mod_list.Mods {
-			var mod_data []ModData = search_mod(v, mod_list.Loader, mod_list.Version)
-			if len(mod_data) == 0 {
-				fmt.Println("No valid version found for " + v + ". Skipping...")
-				continue
-			}
-			var mod = check_for_updates(mod_data)
-
-			download_mod(mod, mod_list)
-		}
 	}
 
 	fmt.Println("\nDone.")
+}
+
+func mod_list_for_type(client_type string, mod_list ModList) {
+	var list []string
+	switch client_type {
+	case "client":
+		list = mod_list.Client
+	case "server":
+		list = mod_list.Server
+	case "both":
+		list = mod_list.Both
+	}
+	fmt.Println(list)
+
+	for _, v := range list {
+		fmt.Println(v)
+	}
+
+	fmt.Println("")
+	for _, v := range list {
+		var mod_data []ModData = search_mod(v, mod_list.Loader, mod_list.Version)
+		if len(mod_data) == 0 {
+			fmt.Println("No valid version found for " + v + ". Skipping...")
+			continue
+		}
+		var mod = check_for_updates(mod_data)
+
+		download_mod(mod, mod_list)
+
+	}
 }
 
 func get_mod_list(mod_list_url string) ModList {
@@ -97,7 +117,7 @@ func search_mod(slug string, loader string, version string) []ModData {
 	if search_times == 1 {
 		return []ModData{}
 	}
-	slug = strings.Replace(slug, " ", "-", -1)
+	slug = strings.ReplaceAll(slug, " ", "-")
 	var furl = fmt.Sprint("https://api.modrinth.com/v2/project/", slug, "/version")
 	var url, _ = url.Parse(furl)
 	var params = url.Query()
@@ -129,9 +149,11 @@ func check_for_updates(mod_data []ModData) ModData {
 					fmt.Println(mod.Name, "is not most recent version. Updating...")
 					os.Remove(fmt.Sprint("mods/", mod.Files[0].Filename))
 				}
+				continue
 			}
 		}
 	}
+
 	return mod_data[0]
 }
 
@@ -172,6 +194,16 @@ func download_mod(mod_data ModData, mod_list ModList) {
 			var mod = check_for_updates(mod_data)
 
 			download_mod(mod, mod_list)
+		}
+	}
+}
+
+func clean(mod_data ModData) {
+	var entries, _ = os.ReadDir("mods")
+	for _, entry := range entries {
+		if entry.Name() == mod_data.Files[0].Filename {
+			os.Remove(fmt.Sprint("mods/", entry.Name()))
+			continue
 		}
 	}
 }
